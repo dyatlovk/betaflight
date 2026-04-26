@@ -1,0 +1,65 @@
+name: Build Betaflight Firmware
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Flight controller target (e.g., APM32F405)'
+        required: false
+        default: 'APM32F405'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        target: [APM32F405]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential git python3
+        sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+    
+    - name: Verify ARM toolchain
+      run: |
+        arm-none-eabi-gcc --version
+        arm-none-eabi-gcc -print-sysroot
+    
+    - name: Build firmware
+      run: |
+        make clean
+        make TARGET=${{ matrix.target }}
+    
+    - name: List build artifacts
+      run: |
+        ls -lh obj/main/betaflight_*.hex
+        ls -lh obj/main/betaflight_*.elf
+    
+    - name: Upload firmware artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: betaflight-firmware-${{ matrix.target }}
+        path: |
+          obj/main/betaflight_*.hex
+          obj/main/betaflight_*.elf
+          obj/main/betaflight_*.bin
+        retention-days: 30
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Betaflight ${{ github.ref }}
+        draft: false
+        prerelease: false
